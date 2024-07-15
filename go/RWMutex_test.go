@@ -1,4 +1,4 @@
-package learn
+package _go
 
 import (
 	"testing"
