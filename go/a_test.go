@@ -1,81 +1,46 @@
 package _go
 
 import (
-	"bytes"
-	"fmt"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/hpack"
-	"net"
-	"os"
+	"time"
+	"sync"
+	"log"
+	"testing"
 )
 
-func main() {
-	// 建立 TCP 连接
-	conn, err := net.Dial("tcp", "www.example.com:443")
-	if err != nil {
-		fmt.Printf("Failed to connect: %v\n", err)
-		return
+var done = false
+
+func read(name string, c *sync.Cond) {
+	c.L.Lock()
+	println(name, "lock")
+	if !done {
+		c.Wait()
 	}
-	defer conn.Close()
+	log.Println(name, "starts reading")
+	c.L.Unlock()
+}
 
-	// 创建 HTTP/2 Framer
-	framer := http2.NewFramer(conn, conn)
+func write(name string, c *sync.Cond) {
+	log.Println(name, "starts writing")
+	time.Sleep(time.Second)
+	c.L.Lock()
+	done = true
+	c.L.Unlock()
+	log.Println(name, "wakes all")
+	c.Broadcast()
+}
 
-	// 发送 SETTINGS 帧
-	if err := framer.WriteSettings(http2.Setting{ID: http2.SettingInitialWindowSize, Val: 65535}); err != nil {
-		fmt.Printf("Failed to write settings: %v\n", err)
-		return
-	}
+func Test_Cond(t *testing.T) {
+	
+	a := make(chan int)
+	close(a)
+	
+	cond := sync.NewCond(&sync.Mutex{})
 
-	// 模拟多个文件数据
-	files := [][]byte{
-		bytes.Repeat([]byte("a"), 64*1024), // 64 KB
-		bytes.Repeat([]byte("b"), 128*1024), // 128 KB
-		bytes.Repeat([]byte("c"), 256*1024), // 256 KB
-	}
+	go read("reader1", cond)
+	go read("reader2", cond)
+	go read("reader3", cond)
+	write("writer", cond)
 
-	for i, file := range files {
-		streamID := uint32(1 + 2*i)
-
-		// 创建 HEADERS 帧
-		headers := []hpack.HeaderField{
-			{Name: ":method", Value: "POST"},
-			{Name: ":path", Value: fmt.Sprintf("/upload/file%d", i+1)},
-			{Name: ":scheme", Value: "https"},
-			{Name: ":authority", Value: "www.example.com"},
-			{Name: "content-length", Value: fmt.Sprintf("%d", len(file))},
-		}
-		var buf bytes.Buffer
-		hpackEncoder := hpack.NewEncoder(&buf)
-		for _, hf := range headers {
-			hpackEncoder.WriteField(hf)
-		}
-
-		// 发送 HEADERS 帧
-		if err := framer.WriteHeaders(http2.HeadersFrameParam{
-			StreamID:      streamID,
-			EndHeaders:    true,
-			BlockFragment: buf.Bytes(),
-		}); err != nil {
-			fmt.Printf("Failed to write headers: %v\n", err)
-			return
-		}
-
-		// 发送 DATA 帧
-		for offset := 0; offset < len(file); offset += http2.DefaultMaxFrameSize {
-			end := offset + http2.DefaultMaxFrameSize
-			if end > len(file) {
-				end = len(file)
-			}
-			data := file[offset:end]
-			endStream := end == len(file)
-			if err := framer.WriteData(streamID, endStream, data); err != nil {
-				fmt.Printf("Failed to write data: %v\n", err)
-				return
-			}
-		}
-	}
-
-	fmt.Println("Files uploaded successfully")
+	time.Sleep(time.Second * 3)
 }
 
