@@ -12,6 +12,7 @@ import (
 // MQ保证消息的顺序性
 // Redis使用lua保证原子性操作 会有什么问题？
 // 职业规划是怎样的
+// 泛型？和interface的区别？
 
 func main() {
 	// 建立 TCP 连接
