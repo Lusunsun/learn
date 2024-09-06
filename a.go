@@ -6,8 +6,12 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/hpack"
 	"net"
-	"os"
 )
+
+// Redis集群三种模式
+// MQ保证消息的顺序性
+// Redis使用lua保证原子性操作 会有什么问题？
+// 职业规划是怎样的
 
 func main() {
 	// 建立 TCP 连接
@@ -17,26 +21,26 @@ func main() {
 		return
 	}
 	defer conn.Close()
-
+	
 	// 创建 HTTP/2 Framer
 	framer := http2.NewFramer(conn, conn)
-
+	
 	// 发送 SETTINGS 帧
 	if err := framer.WriteSettings(http2.Setting{ID: http2.SettingInitialWindowSize, Val: 65535}); err != nil {
 		fmt.Printf("Failed to write settings: %v\n", err)
 		return
 	}
-
+	
 	// 模拟多个文件数据
 	files := [][]byte{
-		bytes.Repeat([]byte("a"), 64*1024), // 64 KB
+		bytes.Repeat([]byte("a"), 64*1024),  // 64 KB
 		bytes.Repeat([]byte("b"), 128*1024), // 128 KB
 		bytes.Repeat([]byte("c"), 256*1024), // 256 KB
 	}
-
+	
 	for i, file := range files {
 		streamID := uint32(1 + 2*i)
-
+		
 		// 创建 HEADERS 帧
 		headers := []hpack.HeaderField{
 			{Name: ":method", Value: "POST"},
@@ -50,7 +54,7 @@ func main() {
 		for _, hf := range headers {
 			hpackEncoder.WriteField(hf)
 		}
-
+		
 		// 发送 HEADERS 帧
 		if err := framer.WriteHeaders(http2.HeadersFrameParam{
 			StreamID:      streamID,
@@ -60,7 +64,7 @@ func main() {
 			fmt.Printf("Failed to write headers: %v\n", err)
 			return
 		}
-
+		
 		// 发送 DATA 帧
 		for offset := 0; offset < len(file); offset += http2.DefaultMaxFrameSize {
 			end := offset + http2.DefaultMaxFrameSize
@@ -75,6 +79,6 @@ func main() {
 			}
 		}
 	}
-
+	
 	fmt.Println("Files uploaded successfully")
 }
