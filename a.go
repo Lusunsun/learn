@@ -18,7 +18,7 @@ func main() {
 	// 建立 TCP 连接
 	conn, err := net.Dial("tcp", "www.example.com:443")
 	if err != nil {
-		fmt.Printf("Failed to connect: %v\n", err)
+		fmt.Printf("Failed to connect: %v\n", err) =
 		return
 	}
 	defer conn.Close()
